@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  SUPERVISOR
+}
+
+enum SiteStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DispatchStatus {
+  PENDING_RECEIPT
+  RECEIVED
+  PARTIAL_RECEIVED
+  DISPUTED
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransactionType {
+  CASH_RECEIVED
+  EXPENSE
+  ADJUSTMENT
+}
+
+enum NotificationType {
+  DISPATCH_CREATED
+  RECEIPT_PENDING
+  RECEIPT_CONFIRMED
+  LOW_BALANCE
+  EXPENSE_ADDED
+  EXPENSE_APPROVED
+  EXPENSE_REJECTED
+}
+
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String
+  phone     String?
+  role      Role
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supervisedSites Site[]
+  cashDispatches  CashDispatch[]
+  cashReceipts    CashReceipt[]
+  expenses        Expense[]
+  notifications   Notification[]
+  attachments     Attachment[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model Site {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  name           String
+  location       String
+  status         SiteStatus @default(ACTIVE)
+  currentBalance Decimal    @default(0) @db.Decimal(15, 2)
+  supervisorId   String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  supervisor     User?          @relation(fields: [supervisorId], references: [id])
+  cashDispatches CashDispatch[]
+  cashReceipts   CashReceipt[]
+  expenses       Expense[]
+  ledgerEntries  LedgerEntry[]
+
+  @@index([supervisorId])
+  @@index([status])
+  @@map("sites")
+}
+
+model CashDispatch {
+  id           String         @id @default(uuid())
+  siteId       String
+  amount       Decimal        @db.Decimal(15, 2)
+  carrierName  String
+  purpose      String
+  notes        String?
+  dispatchDate DateTime
+  status       DispatchStatus @default(PENDING_RECEIPT)
+  createdById  String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  site      Site          @relation(fields: [siteId], references: [id])
+  createdBy User          @relation(fields: [createdById], references: [id])
+  receipt   CashReceipt?
+
+  @@index([siteId, status])
+  @@index([createdById])
+  @@map("cash_dispatches")
+}
+
+model CashReceipt {
+  id                String   @id @default(uuid())
+  dispatchId        String   @unique
+  siteId            String
+  receivedAmount    Decimal  @db.Decimal(15, 2)
+  discrepancyAmount Decimal  @default(0) @db.Decimal(15, 2)
+  remarks           String?
+  receivedById      String
+  receivedAt        DateTime @default(now())
+
+  dispatch   CashDispatch @relation(fields: [dispatchId], references: [id])
+  site       Site         @relation(fields: [siteId], references: [id])
+  receivedBy User         @relation(fields: [receivedById], references: [id])
+
+  @@index([siteId])
+  @@index([receivedById])
+  @@map("cash_receipts")
+}
+
+model ExpenseCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  expenses    Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id          String        @id @default(uuid())
+  siteId      String
+  categoryId  String
+  amount      Decimal       @db.Decimal(15, 2)
+  vendorName  String
+  description String?
+  expenseDate DateTime
+  status      ExpenseStatus @default(PENDING)
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  site      Site            @relation(fields: [siteId], references: [id])
+  category  ExpenseCategory @relation(fields: [categoryId], references: [id])
+  createdBy User            @relation(fields: [createdById], references: [id])
+
+  @@index([siteId, expenseDate])
+  @@index([categoryId])
+  @@index([createdById])
+  @@map("expenses")
+}
+
+model LedgerEntry {
+  id              String          @id @default(uuid())
+  siteId          String
+  transactionType TransactionType
+  referenceType   String
+  referenceId     String
+  credit          Decimal         @default(0) @db.Decimal(15, 2)
+  debit           Decimal         @default(0) @db.Decimal(15, 2)
+  balanceAfter    Decimal         @db.Decimal(15, 2)
+  description     String?
+  createdAt       DateTime        @default(now())
+
+  site Site @relation(fields: [siteId], references: [id])
+
+  @@index([siteId, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("ledger_entries")
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String
+  title         String
+  message       String
+  type          NotificationType
+  isRead        Boolean          @default(false)
+  referenceType String?
+  referenceId   String?
+  createdAt     DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Attachment {
+  id            String   @id @default(uuid())
+  fileName      String
+  originalName  String
+  filePath      String
+  mimeType      String
+  size          Int
+  referenceType String
+  referenceId   String
+  uploadedById  String
+  createdAt     DateTime @default(now())
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([referenceType, referenceId])
+  @@map("attachments")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  oldValue  String?  @db.Text
+  newValue  String?  @db.Text
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}
