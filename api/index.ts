@@ -2,40 +2,45 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter } from '@nestjs/platform-express';
+import express from 'express';
 import { AppModule } from '../server/src/app.module';
 import { HttpExceptionFilter } from '../server/src/common/filters/http-exception.filter';
 import { ResponseInterceptor } from '../server/src/common/interceptors/response.interceptor';
-import express from 'express';
 
-const server = express();
-let app: any;
+let cachedServer: express.Express;
 
-async function bootstrap() {
-  if (!app) {
-    app = await NestFactory.create(AppModule, new ExpressAdapter(server));
-    app.setGlobalPrefix('api');
-    
-    app.enableCors({
-      origin: true,
-      credentials: true,
-    });
-
-    app.useGlobalPipes(
-      new ValidationPipe({
-        whitelist: true,
-        transform: true,
-        transformOptions: { enableImplicitConversion: true },
-      }),
-    );
-
-    app.useGlobalFilters(new HttpExceptionFilter());
-    app.useGlobalInterceptors(new ResponseInterceptor());
-    
-    await app.init();
+async function bootstrap(): Promise<express.Express> {
+  if (cachedServer) {
+    return cachedServer;
   }
+
+  const server = express();
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
+  
+  app.setGlobalPrefix('api');
+  
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
+  await app.init();
+  cachedServer = server;
+  return server;
 }
 
-export default async (req: any, res: any) => {
-  await bootstrap();
-  server(req, res);
-};
+export default async function handler(req: any, res: any) {
+  const server = await bootstrap();
+  return server(req, res);
+}

@@ -2,13 +2,15 @@
   "name": "cashflow-monorepo",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "workspaces": [
     "client",
     "server"
   ],
   "scripts": {
-    "vercel-build": "prisma generate --schema=server/prisma/schema.prisma && npm run build --workspace=client",
-    "build": "npm run vercel-build"
+    "vercel-build": "cd server && npm run prisma:generate && cd ../client && npm run build"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
