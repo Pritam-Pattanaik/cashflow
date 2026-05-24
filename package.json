@@ -7,7 +7,7 @@
     "server"
   ],
   "scripts": {
-    "vercel-build": "npx --no-install prisma generate --schema=server/prisma/schema.prisma && npm run build --workspace=client",
+    "vercel-build": "prisma generate --schema=server/prisma/schema.prisma && npm run build --workspace=client",
     "build": "npm run vercel-build"
   },
   "dependencies": {
