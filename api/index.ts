@@ -15,6 +15,15 @@ async function bootstrap(): Promise<express.Express> {
   }
 
   const server = express();
+  
+  // Normalize req.url for Vercel's routing where the /api prefix might be stripped
+  server.use((req: any, res: any, next: any) => {
+    if (req.url && !req.url.startsWith('/api')) {
+      req.url = `/api${req.url.startsWith('/') ? '' : '/'}${req.url}`;
+    }
+    next();
+  });
+
   const app = await NestFactory.create(AppModule, new ExpressAdapter(server));
   
   app.setGlobalPrefix('api');
